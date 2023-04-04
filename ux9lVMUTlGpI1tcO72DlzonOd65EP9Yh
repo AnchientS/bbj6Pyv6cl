@@ -1,1 +1,675 @@
-log("SCRIPT UNDER MAINTENANCE")
+
+load(httprequest("https://raw.githubusercontent.com/dailybgl/GrowPai-SCRIPTS/main/useridDB.lua","get"))()
+local startscript = false
+for key,value in pairs(uid) do
+    if value == GetLocal().userid then
+        startscript = true
+    end
+end
+local function log(str,type)
+    if type then
+        local var = {}
+        var[0] = "OnTextOverlay"
+        var[1] = string.format("`#[`9DAILY`#] `c%s",str)
+        var.delay = 3
+        var.netid = -1
+        SendVarlist(var)
+    else
+        local var = {}
+        var[0] = "OnTextOverlay"
+        var[1] = string.format("`#[`4WARNING`#] %s``",str)
+        var.delay = 3
+        var.netid = -1
+        SendVarlist(var)
+    end
+end
+if startscript then
+    RemoveCallbacks()
+    local do_auto = true
+    local do_ptht = false
+    local getWear = true
+    local world_200x200 = false
+    local item_break_weared = false
+    local item_harvest_weared = false
+    local magindex = 1
+    local reconnect_type = 1
+    local magpositionx = 0
+    local tilecount = 0
+    local magpositiony = 0
+    local current_bgems_count = 0
+    local bgemsa = 0
+    local job = "Looking for job"
+    local function Wrench(x, y)
+        local pkt = {}
+        pkt.type = 3
+        pkt.int_data = 32
+        pkt.int_x = x
+        pkt.int_y = y
+        pkt.pos_x = GetLocal().pos_x
+        pkt.pos_y = GetLocal().pos_y
+        SendPacketRaw(pkt)
+    end
+    local function Punch(x, y)
+        local pkt = {}
+        pkt.type = 3
+        pkt.int_data = 18
+        pkt.pos_x = GetLocal().pos_x
+        pkt.pos_y = GetLocal().pos_y
+        pkt.int_x = x
+        pkt.int_y = y
+        pkt.flags = 16
+        SendPacketRaw(pkt)
+    end
+    local function Place(x,y,itemid)
+        local pkt = {}
+        pkt.type = 3
+        pkt.int_data = itemid
+        pkt.pos_x = GetLocal().pos_x
+        pkt.pos_y = GetLocal().pos_y
+        pkt.int_x = x
+        pkt.int_y = y
+        SendPacketRaw(pkt)
+    end
+    local function Wear(id)
+        local pkt = {}
+        pkt.type = 10 
+        pkt.int_data = id
+        SendPacketRaw(pkt)
+    end
+    local function callRayman()
+        local pkt = {}
+        pkt.type = 0 
+        pkt.int_x = -1
+        pkt.int_y = -1
+        pkt.flags = 16779298
+        SendPacketRaw(pkt)
+    end
+    local function count_tiles(type, item_id)
+        if GetLocal().world:upper() ~= world_auto:upper() then
+            return 1
+        end
+        local count = 0
+        local tiles = world_200x200 and {width = 199, height = 193} or {width = 99, height = 53}
+        for y = 0, tiles.height do
+            for x = 0, tiles.width do
+                local tile = GetTile(x,y)
+                if type == "ready" and tile.fg == item_id and tile.ready then
+                    count = count + 1
+                elseif type == "plat" and tile.fg == item_id and GetTile(x,y-1).fg == 0 then
+                    count = count + 1
+                end
+            end
+        end
+        return count
+    end
+    local function GetFloat(item_id)
+        if GetLocal().world:upper() == "EXIT" then
+            return 1
+        end
+        local count = 0
+        for _,obj in pairs(GetObjects()) do
+            if obj.id == 112 then
+                count = count+1
+            end
+        end
+        return count
+    end
+    local function SendWebhook(messageID, info)
+        if send_webhook then
+        local gems1 = string.format("%d", GetLocal().gems) or "1"
+        local gems = gems1:reverse():gsub("%d%d%d", "%0,"):reverse():gsub("^%,", "") or "1"
+        local bgems1 = string.format("%d", current_bgems_count) or "1"
+        local bgems = bgems1:reverse():gsub("%d%d%d", "%0,"):reverse():gsub("^%,", "") or "1"
+        local fgems1 = string.format("%d", GetFloat(112)) or "1"
+        local fgems = fgems1:reverse():gsub("%d%d%d", "%0,"):reverse():gsub("^%,", "") or "1"
+        local name = GetLocal().name:match("`.(%a+)``") or "unknown"
+        local world = GetLocal().world or "-"
+        local ping = math.floor(GetPing())
+        local jobs = job
+        local status = world:upper() ~= world_auto:upper() and "<a:offline:1007062527932379176>" or "<a:online:1007062631787544666>"
+    
+        local formatted_webhook = string.format([[
+            $description = "<:broadcast:993135658069659699>**INFO :** ``%s``"
+            $name = "%s"
+            $gems = "%s"
+            $bgems = "%s"
+            $fgems = "%s"
+            $world = "%s"
+            $jobs = "%s"
+            $Ping = "%d"
+            $Status = "%s"
+            $webHookUrl = "%s/messages/%s"
+        
+            $interface = Get-WmiObject -Class Win32_NetworkAdapterConfiguration | Where-Object {$_.IPAddress -ne $null} | Select-Object -First 1
+            $ip = $interface.IPAddress[0]
+            $CompObject =  Get-WmiObject -Class WIN32_OperatingSystem
+            $Memory = ((($CompObject.TotalVisibleMemorySize - $CompObject.FreePhysicalMemory)*100)/ $CompObject.TotalVisibleMemorySize)
+            $cpu = (Get-WmiObject win32_processor | Measure-Object -property LoadPercentage -Average | Select Average).Average
+            $time = Get-Date -Format "HH:mm"
+        
+            [System.Collections.ArrayList]$embedArray = @()
+                    
+            $embedObject = [PSCustomObject]@{
+            description = $description
+            title = "<a:VIP:1005214647349157959> Daily | Rotation Logs <a:VIP:1005214647349157959>"
+            color = "16706849"
+            fields = @(
+                @{
+                    inline = "True"
+                    name = "<a:brains:1092857618382467103> CPU"
+                    value = "<a:tancep:992537261046501416> ``" + $cpu + "%% ``"
+                }
+                @{
+                    inline = "True"
+                    name = "<a:storage:1007064874641276959> MEMORY"
+                    value = "<a:tancep:992537261046501416> ``" + [Math]::Floor($Memory) + "%% ``"
+                }	
+                @{
+                    inline = "True"
+                    name = $Status + " STATUS"
+                    value = "<a:tancep:992537261046501416> ``PING : " + $ping + " ms``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<a:kocoks:991048973592719501> NAME"
+                    value = "<a:tancep:992537261046501416> ``" + $name + "``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<a:globe:1007060932981178442> WORLD"
+                    value = "<a:tancep:992537261046501416> ``" + $world + "``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<:pickaxe:992924907870625792> JOB"
+                    value = "<a:tancep:992537261046501416> ``" + $jobs + "``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<:gems:992921787778220103> GEMS"
+                    value = "<a:tancep:992537261046501416> ``" + $gems + "``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<:bgems:1092830103341383781> BGEMS"
+                    value = "<a:tancep:992537261046501416> ``" + $bgems + "``"
+                }	
+                @{
+                    inline = "True"
+                    name = "<a:fgems:1092912021235843143> FLOATING GEMS"
+                    value = "<a:tancep:992537261046501416> ``" + $fgems + " i cant scan it all``"
+                }	
+            )
+            footer = @{
+                text = "IPv4 : " + $ip + " | Last Edit " + $time
+                icon_url = "https://cdn.discordapp.com/emojis/1007064469161123850.gif?size=96&quality=lossless"
+            }
+            }
+            
+            $embedArray.Add($embedObject) | Out-Null
+            $payload = [PSCustomObject]@{
+                embeds = $embedArray
+                content = "Have a nice Day!"
+            }
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-RestMethod -Uri $webHookUrl -Body ($payload | ConvertTo-Json -Depth 4) -Method Patch -ContentType 'application/json'
+            ]], info, name, gems, bgems, fgems, world, jobs, tonumber(ping) or 1, status, webhook_url, messageID)
+        
+        local kimak = io.popen("powershell -command -","w")
+        kimak:write(formatted_webhook)
+        kimak:close()
+        end
+    end
+    local function Recon()
+        while GetLocal().world:upper() ~= world_auto:upper() do
+            log("Disconnected..",true)
+            Sleep(1000)
+            job = "Reconnecting"
+            SendWebhook(webhook_messageId,"Uh i got disconnected, trying to reconnect")
+            Sleep(20000)
+            if GetLocal().world == string.upper(world_auto) then
+                log("Reconnected",true)
+                Sleep(1000)
+                SendWebhook(webhook_messageId,"Im back! Reconnected")
+                break
+            end
+            SendPacket(3,"action|join_request\nname|".. world_auto .."\ninvitedWorld|0\n")
+            Sleep(10000)
+        end
+        local hasmag = false
+        for _, item in pairs(GetInventory()) do
+            if item.id == 5640 then
+                hasmag = true
+                break
+            end
+        end
+        if not hasmag then
+            local mag_pos_x, mag_pos_y
+            if reconnect_type == 1 then
+                if world_200x200 then
+                    if magindex == 1 then
+                        mag_pos_x, mag_pos_y = magposX_block_island_1, magposY_block_island_1
+                        SendWebhook(webhook_messageId,"Taking a remote from magplant 1")
+                    elseif magindex == 2 then
+                        mag_pos_x, mag_pos_y = magposX_block_island_2, magposY_block_island_2
+                        SendWebhook(webhook_messageId,"Taking a remote from magplant 2")
+                    end
+                else
+                    mag_pos_x, mag_pos_y = magposX_block, magposY_block
+                    SendWebhook(webhook_messageId,"Taking a remote from magplant")
+                end
+            else
+                mag_pos_x, mag_pos_y = magposX_seed, magposY_seed
+                SendWebhook(webhook_messageId,"Taking a remote from magplant seed")
+            end
+            Sleep(500)
+            if GetTile(mag_pos_x, mag_pos_y-1).fg ~= 0 and GetTile(mag_pos_x, mag_pos_y-1).fg ~= id_farmable then
+                SendWebhook(webhook_messageId,"Something weird blocking my way to take a remote")
+                Sleep(1000)
+                FindPath(mag_pos_x, mag_pos_y-2)
+                Sleep(500)
+                while GetTile(mag_pos_x, mag_pos_y-1).fg ~= 0 do
+                    Punch(mag_pos_x, mag_pos_y-1)
+                    Sleep(500)    
+                end
+                Sleep(1000)
+                SendWebhook(webhook_messageId,"it's gone")
+            end
+            Sleep(500)
+            FindPath(mag_pos_x, mag_pos_y-1)
+            Sleep(1000)
+            Wrench(mag_pos_x, mag_pos_y)
+            Sleep(1000)
+            SendPacket(2,"action|dialog_return\ndialog_name|magplant_edit\nx|"..mag_pos_x.."|\ny|"..mag_pos_y.."|\nbuttonClicked|getRemote\n")
+            Sleep(500)
+            if reconnect_type == 1 then
+                FindPath(pos_break_x,pos_break_y)
+                Sleep(500)
+                SendPacket(2,"action|dialog_return\ndialog_name|cheats\ncheck_autofarm|1\ncheck_bfg|1\ncheck_gems|"..collect_gems)
+                Sleep(500)
+            end
+        end
+    end
+
+    AddCallback("GetBgems","OnVarlist",function(v,p)
+        if v[0]:find("OnDialogRequest") and v[1]:find("The Black Gem Bank") then
+            current_bgems_count = v[1]:match("`$(%d+)``")
+            return true
+        end
+    end)
+    AddCallback("DialogCallback", "OnVarlist",function(varlist, packet)
+        if varlist[0]:find("OnDialogRequest") then
+            if varlist[1]:find("end_dialog|magplant_edit") then
+                local matchx = varlist[1]:match("embed_data|x|(%d+)")
+                local matchy = varlist[1]:match("embed_data|y|(%d+)")
+                magpositionx = tonumber(matchx)
+                magpositiony = tonumber(matchy)
+                if varlist[1]:find("add_label|small|Building mode: `6DISABLED``") then
+                    return true
+                end
+                local matches = varlist[1]:match("`w(%d+)`` items")
+                local magcount = tonumber(matches)
+                log("Total item in magplant : "..magcount,true)
+                return true
+            elseif varlist[1]:find("end_dialog|popup") then
+                if getWear then
+                    if item_break == 13826 and varlist[1]:find("`wLegendary Powers``") then
+                        item_break_weared = true
+                    elseif item_break == 13862 and varlist[1]:find("`wMythical Powers``") then
+                        item_break_weared = true
+                    elseif item_break == 5480 and varlist[1]:find("`wRayman's Fists!``") then
+                        item_break_weared = true
+                    else
+                        item_break_weared = false
+                    end
+                else
+                    if item_ptht == 13826 and varlist[1]:find("`wLegendary Powers``") then
+                        item_harvest_weared = true
+                    elseif item_ptht == 13862 and varlist[1]:find("`wMythical Powers``") then
+                        item_harvest_weared = true
+                    elseif item_ptht == 5480 and varlist[1]:find("`wRayman's Fists!``") then
+                        item_harvest_weared = true
+                    else
+                        item_harvest_weared = false
+                    end
+                end
+                return true
+            end
+        end
+    end)
+    AddCallback("DETECTEMPTY", "OnVarlist", function(varlist, packet)
+        if varlist[0]:find("OnTalkBubble") and varlist[2]:find("The MAGPLANT 5000 is empty.") then
+            if world_200x200 then
+                if magpositionx == magposX_block_island_1 and magpositiony == magposY_block_island_1 then
+                    log("MAGPLANT EMPTY",true)
+                    do_auto = true
+                    do_ptht = false
+                    magindex = 2
+                    return true
+                elseif magpositionx == magposX_block_island_2 and magpositiony == magposY_block_island_2 then
+                    log("MAGPLANT EMPTY",true)
+                    do_auto = false
+                    do_ptht = true
+                    magindex = 1
+                    return true
+                end
+            end
+            log("MAGPLANT EMPTY",true)
+            do_auto = false
+            do_ptht = true
+            return
+        end
+    end)
+    AddCallback("AutoBan","OnVarlist",function(varlist,packet)
+        if varlist[0]:find("OnSpawn") and not varlist[1]:find("name|server") then
+            local name = varlist[1]:match("name|`.(%a+)``")
+            if name:upper() ~= GetLocal().name:match("`.(%a+)``"):upper() then
+                SendPacket(2,"action|input\n|text|/ban /"..name:upper())
+            end
+        end
+    end)
+    AddCallback("CONSUMABLE","OnVarlist",function (varlist,packet)
+        if varlist[0]:find("OnConsoleMessage") and varlist[1]:find("mod removed") then
+            local mod = varlist[1]:match('%(`$(.+)%s``mod removed%)')
+            if mod == 'Food: Breaking Gems' then
+                Place(math.floor(GetLocal().pos_x / 32),math.floor(GetLocal().pos_y / 32),4604)
+            elseif mod == 'Lucky!' then
+                Place(math.floor(GetLocal().pos_x / 32),math.floor(GetLocal().pos_y / 32),528)
+            end
+        end
+    end)
+    log("SCRIPT EXECUTED",false)
+    SendWebhook(webhook_messageId,"Yay script started")
+    Sleep(3000)
+    if GetLocal().world ~= world_auto:upper() then
+        log("`#Warping to world auto",true)
+        SendPacket(3,"action|join_request\nname|"..world_auto.."\ninvitedWorld|0\n")
+        Sleep(10000)
+    end
+    for _,tile in pairs(GetTiles()) do
+        if tile.pos_x > 100 then
+            world_200x200 = true
+            log("`#WORLD ISLAND DETECTED",true)
+            break
+        end
+    end
+    Sleep(3000)
+    SendPacket(2,"action|dialog_return\ndialog_name|social\nbuttonClicked|bgems\n")
+    log("`4NEVER USE WRENCH ON MAGPLANT OR YOU WILL GET STUCK",false) 
+    EditToggle("modfly", true)
+    Sleep(1000)
+    while true do
+        if count_tiles("ready",id_farmable) > 0 then
+            SendPacket(2,"action|dialog_return\ndialog_name|cheats\ncheck_autofarm|0\ncheck_autoplace|0")
+            reconnect_type = 0
+            do_auto = false
+            do_ptht = false
+            getWear = false
+            job = "Harvesting remaining trees"
+            SendWebhook(webhook_messageId,"Hey there are trees not been harvested yet, im gonna take it")
+            Sleep(1000)
+            SendPacket(2,"action|wrench\n|netid|"..GetLocal().netid)
+            Sleep(2000)
+            if not item_harvest_weared then
+                Wear(item_ptht)
+            end
+            Sleep(500)
+            if item_break == 13862 then
+                SendPacket(2,"action|dialog_return\ndialog_name|info_box\nmray_1hit|0\n")
+            end
+            Sleep(500)
+            while count_tiles("ready",id_farmable) > 0 do
+                Recon()
+                Sleep(1000)
+                local worldWidth, worldHeight = 99, 53
+                if world_200x200 then
+                    worldWidth, worldHeight = 199, 193
+                end
+                for y = 0, worldHeight do
+                    for x = 0, worldWidth do
+                        local tile = GetTile(x, y)
+                        if tile.fg == id_farmable and tile.ready then
+                            Recon()
+                            FindPath(x, y)
+                            if item_ptht ~= 13862 then
+                                callRayman()
+                                Sleep(delay_ht)
+                                Punch(x,y)
+                            else
+                                Sleep(delay_ht)
+                                Punch(x,y)
+                                Sleep(100)
+                            end
+                        end
+                    end
+                end
+                Sleep(1000)
+                Recon()
+            end
+            do_auto = true
+            do_ptht = false
+        end
+        Sleep(2000)
+        if do_auto then
+            Sleep(1000)
+            reconnect_type = 1
+            job = "Breaking Farmables"
+            local mag_pos_x, mag_pos_y
+            if world_200x200 then
+                if magindex == 1 then
+                    mag_pos_x, mag_pos_y = magposX_block_island_1, magposY_block_island_1
+                    SendWebhook(webhook_messageId,"Taking a remote from magplant 1")
+                elseif magindex == 2 then
+                    mag_pos_x, mag_pos_y = magposX_block_island_2, magposY_block_island_2
+                    SendWebhook(webhook_messageId,"Taking a remote from magplant 2")
+                else
+                    log("Unexpected value for mag index",true)
+                end
+            else
+                mag_pos_x, mag_pos_y = magposX_block, magposY_block
+                SendWebhook(webhook_messageId,"Taking a remote from magplant")
+            end
+            SendPacket(2,"action|dialog_return\ndialog_name|cheats\ncheck_autofarm|0\ncheck_autoplace|0")
+            Sleep(2000)
+            if GetTile(mag_pos_x, mag_pos_y-1).fg ~= 0 and GetTile(mag_pos_x, mag_pos_y-1).fg ~= id_farmable then
+                SendWebhook(webhook_messageId,"Something weird blocking my way to take a remote")
+                Sleep(1000)
+                FindPath(mag_pos_x, mag_pos_y-2)
+                Sleep(500)
+                while GetTile(mag_pos_x, mag_pos_y-1).fg ~= 0 do
+                    Punch(mag_pos_x, mag_pos_y-1)
+                    Sleep(500)    
+                end
+                Sleep(1000)
+                SendWebhook(webhook_messageId,"it's gone")
+            end
+            Sleep(500)
+            FindPath(mag_pos_x, mag_pos_y-1)
+            Sleep(500)
+            Wrench(mag_pos_x, mag_pos_y)
+            Sleep(500)
+            SendPacket(2,"action|dialog_return\ndialog_name|magplant_edit\nx|"..mag_pos_x.."|\ny|"..mag_pos_y.."|\nbuttonClicked|getRemote\n")
+            Sleep(500)
+            FindPath(pos_break_x,pos_break_y)
+            getWear = true
+            Sleep(1000)
+            SendPacket(2,"action|wrench\n|netid|"..GetLocal().netid)
+            Sleep(2000)
+            if not item_break_weared then
+                Wear(item_break)
+            end
+            Sleep(500)
+            if mray_autobreak_1hit and item_break == 13862 then
+                SendPacket(2,"action|dialog_return\ndialog_name|info_box\nmray_1hit|1\n")
+            end
+            Sleep(500)
+            if remove_particle_break then
+                AddCallback("Particle", "OnIncomingRawPacket", function (packet)
+                    if packet.type == 17 then
+                        return true
+                    end
+                end)
+            end
+            Sleep(500)
+            SendPacket(2,"action|dialog_return\ndialog_name|cheats\ncheck_autofarm|1\ncheck_bfg|1\ncheck_gems|"..collect_gems)
+            Sleep(500)
+            Place(math.floor(GetLocal().pos_x / 32),math.floor(GetLocal().pos_y / 32),528)
+            Sleep(1000)
+            Place(math.floor(GetLocal().pos_x / 32),math.floor(GetLocal().pos_y / 32),4604)
+            Sleep(1000)
+            do_auto = false
+        end
+        Sleep(5000)
+        if do_ptht then
+            reconnect_type = 0
+            job = "Planting and Harvesting"
+            SendWebhook(webhook_messageId,"All farmable block breaked")
+            if remove_particle_break then
+                RemoveCallback("Particle")
+            end
+            SendPacket(2,"action|dialog_return\ndialog_name|social\nbuttonClicked|bgem_suckall\n")
+            Sleep(500)
+            SendPacket(2,"action|dialog_return\ndialog_name|cheats\ncheck_autofarm|0\ncheck_bfg|0\ncheck_gems|0")
+            getWear = false
+            Sleep(1000)
+            SendPacket(2,"action|wrench\n|netid|"..GetLocal().netid)
+            Sleep(1000)
+            if not item_harvest_weared then
+                Wear(item_ptht)
+            end
+            Sleep(1000)
+            SendWebhook(webhook_messageId,"Taking a remote from magplant seed")
+            if GetTile(magposX_seed, magposY_seed-1).fg ~= 0 and GetTile(magposX_seed, magposY_seed-1).fg ~= id_farmable then
+                SendWebhook(webhook_messageId,"Something weird blocking my way to take a remote")
+                Sleep(1000)
+                FindPath(magposX_seed, magposY_seed-2)
+                Sleep(500)
+                while GetTile(magposX_seed, magposY_seed-1).fg ~= 0 do
+                    Punch(magposX_seed, magposY_seed-1)
+                    Sleep(500)    
+                end
+                Sleep(1000)
+                SendWebhook(webhook_messageId,"it's gone")
+            end
+            Sleep(500)
+            FindPath(magposX_seed,magposY_seed-1)
+            Sleep(500)
+            Wrench(magposX_seed,magposY_seed)
+            Sleep(500)
+            SendPacket(2,"action|dialog_return\ndialog_name|magplant_edit\nx|".. magposX_seed .."|\ny|".. magposY_seed .."|\nbuttonClicked|getRemote\n")
+            Sleep(500)
+            if item_break == 13862 then
+                SendPacket(2,"action|dialog_return\ndialog_name|info_box\nmray_1hit|0\n")
+            end
+            Sleep(1000)
+            job = "Planting"
+            SendWebhook(webhook_messageId,"Start planting")
+            for abcd = 1, 2 do
+                while count_tiles("plat",id_plat) > 0 do
+                    Recon()
+                    Sleep(1000)
+                    local worldWidth, worldHeight = 99, 53
+                    if world_200x200 then
+                        worldWidth, worldHeight = 199, 193
+                    end
+                    for y = 0, worldHeight - 1 do
+                        local startX, endX, stepX = 0, worldWidth - 1, 1
+                        if y % 2 == 1 then
+                            startX, endX, stepX = worldWidth - 1, 0, -1
+                        end
+                        for x = startX, endX, stepX do
+                            if GetTile(x,y).fg == id_plat then
+                                if GetTile(x,y-1).fg == 0 then
+                                    Recon()
+                                    if item_ptht == 13862 then
+                                        if y-3 <= 0 or y-2 <= 0 then
+                                            FindPath(x,0)
+                                        else
+                                            FindPath(x,y-3)
+                                        end
+                                        Sleep(delay_pt)
+                                        Place(x,y-1,5640)
+                                    else
+                                        FindPath(x,y-1)
+                                        Sleep(delay_pt)
+                                        Place(x,y-1,5640)
+                                        if GetTile(x,y+1).fg == 0 then
+                                            Sleep(100)
+                                            Place(x,y+1,5640)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    Sleep(1000)
+                    Recon()
+                end
+                Sleep(2000)
+                SendPacket(2,"action|dialog_return\ndialog_name|ultraworldspray")
+                SendWebhook(webhook_messageId,"Using Ultra World Spray, i have "..math.floor(GetItemCount(12600)).." left")
+                Sleep(3000)
+                job = "Harvesting"
+                SendWebhook(webhook_messageId,"Start Harvesting")
+                while count_tiles("ready",id_farmable) > 0 do
+                    Recon()
+                    Sleep(1000)
+                    local worldWidth, worldHeight = 99, 53
+                    if world_200x200 then
+                        worldWidth, worldHeight = 199, 193
+                    end
+                    for y = 0, worldHeight do
+                        for x = 0, worldWidth do
+                            local tile = GetTile(x, y)
+                            if tile.fg == id_farmable and tile.ready then
+                                Recon()
+                                if item_ptht ~= 13862 then
+                                    FindPath(x, y)
+                                    callRayman()
+                                    Sleep(delay_ht)
+                                    Punch(x,y)
+                                else
+                                    FindPath(x, y)
+                                    Sleep(delay_ht)
+                                    Punch(x,y)
+                                    Sleep(100)
+                                end
+                            end
+                        end
+                    end
+                    Sleep(1000)
+                    Recon()
+                end
+                Sleep(1000)
+            end
+            job = "Breaking Farmables"
+            SendWebhook(webhook_messageId,"Harvesting Done! time to auto break")
+            Sleep(1000)
+            do_auto = true
+            do_ptht = false
+            getWear = true
+            Sleep(1000)
+            SendPacket(2,"action|wrench\n|netid|"..GetLocal().netid)
+            Sleep(2000)
+            if not item_break_weared then
+                Wear(item_break)
+            end
+        end
+        Sleep(5000)
+        Recon()
+        SendPacket(2,"action|dialog_return\ndialog_name|social\nbuttonClicked|bgems\n")
+        Sleep(1000)
+        bgemsa = current_bgems_count
+        Sleep(1000)
+        SendPacket(2,"action|dialog_return\ndialog_name|social\nbuttonClicked|bgem_suckall\n")
+        Sleep(1000)
+        SendPacket(2,"action|dialog_return\ndialog_name|social\nbuttonClicked|bgems\n")
+        Sleep(1000)
+        local bgemsb = current_bgems_count - bgemsa
+        if send_webhook_when_sucks then
+            SendWebhook(webhook_messageId,"Sucks "..bgemsb.." Black Gems")
+        end
+    end
+else
+    log("YOU DONT HAVE ACCESS, BUY AT https://discord.gg/FDyj7Kbx7z",false)
+end
